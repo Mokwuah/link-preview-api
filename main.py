@@ -1,7 +1,7 @@
 import uvicorn
 import os
 import requests
-from fastapi import FastAPI, HTTPException, Header, Depends, Request
+from fastapi import FastAPI, HTTPException, Header, Depends
 from pydantic import BaseModel, HttpUrl
 from bs4 import BeautifulSoup
 from typing import Optional
@@ -10,6 +10,7 @@ from urllib.parse import urljoin
 app = FastAPI(title="Link Preview API")
 
 # --- CONFIGURATION ---
+# This now matches the UUID we saved in Render
 EXPECTED_SECRET = os.environ.get("API_SECRET", "dev-secret")
 
 # --- DATA MODELS ---
@@ -23,32 +24,13 @@ class LinkMetadata(BaseModel):
 class LinkRequest(BaseModel):
     url: HttpUrl
 
-# --- DEBUGGING MIDDLEWARE ---
-# This prints every request header to the logs so we can see what is arriving.
-@app.middleware("http")
-async def log_headers(request: Request, call_next):
-    print(f"--- INCOMING REQUEST TO {request.url.path} ---")
-    # Print all headers to find the secret
-    for key, value in request.headers.items():
-        if "secret" in key.lower():
-            print(f"DEBUG HEADER FOUND: {key}: {value}")
-    
-    print(f"DEBUG: Server expects API_SECRET: '{EXPECTED_SECRET}'")
-    response = await call_next(request)
-    return response
-
 # --- SECURITY FUNCTION ---
 async def verify_secret(x_rapidapi_proxy_secret: str = Header(None, alias="X-RapidAPI-Proxy-Secret")):
-    # 1. Check if secret matches
+    # Strict check: The header MUST match what is in Render's API_SECRET
     if x_rapidapi_proxy_secret == EXPECTED_SECRET:
         return True
     
-    # 2. If it failed, print WHY it failed
-    print(f"!!! AUTH FAILURE !!!")
-    print(f"Received: '{x_rapidapi_proxy_secret}'")
-    print(f"Expected: '{EXPECTED_SECRET}'")
-    
-    # 3. Allow 'dev-secret' fallback if the server reset itself
+    # Fallback for local testing
     if EXPECTED_SECRET == "dev-secret":
         return True
 
